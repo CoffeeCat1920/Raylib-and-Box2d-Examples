@@ -1,96 +1,121 @@
-#include "box2d/box2d.h"
-#include "box2d/id.h"
-#include "box2d/types.h"
-#include "core/b2r.hpp"
 #include "raylib/raylib.h"
-#include <iostream>
+#include "box2d/box2d.h"
+#include <vector>
 
-class PhysicsHandler {
-  
-private:
-
-  float timeStep;
-
-  b2WorldId worldId;
-  b2BodyId groundId;
-  b2BodyId dynamicId;
-
-public:
-
-  PhysicsHandler() {
-    
-    timeStep = 1.0f / 60.0f;
-
-    // World
-    b2WorldDef worldDef = b2DefaultWorldDef();
-    worldDef.gravity = (b2Vec2){0.0f, -10.0f}; 
-    worldId = b2CreateWorld(&worldDef);
-   
-    // Ground
-    b2BodyDef groundBodyDef = b2DefaultBodyDef();
-    groundBodyDef.position = (b2Vec2){0.0f, -10.0f};
-    groundId = b2CreateBody(worldId, &groundBodyDef);
-
-    b2Polygon groundBox = b2MakeBox(50.0f, 10.0f);
-    b2ShapeDef groundShapeDef = b2DefaultShapeDef();
-    b2CreatePolygonShape(groundId, &groundShapeDef, &groundBox);
-
-    // Dynamic
-    b2BodyDef dynamicBody = b2DefaultBodyDef();
-    dynamicBody.type = b2_dynamicBody;
-    dynamicBody.position = (b2Vec2){0.0f, 4.0f};
-    dynamicId = b2CreateBody(worldId, &dynamicBody);
-
-    b2Polygon dynamicBox = b2MakeBox(1.0f, 1.0f);
-    b2ShapeDef shapeDef = b2DefaultShapeDef();
-    shapeDef.density = 1.0f;
-    shapeDef.material.friction = 0.3f;
-
-    b2CreatePolygonShape(dynamicId, &shapeDef, &dynamicBox);
-  }
-
-  ~PhysicsHandler() {
-    b2DestroyWorld(worldId);
-  }
-
-  void Update() {
-    b2World_Step(worldId, timeStep, 4);
-  } 
-
-  void Draw() {
-    b2Vec2 position = b2Body_GetPosition(dynamicId);
-    b2Rot rotation = b2Body_GetRotation(dynamicId);
-    printf("%4.2f %4.2f %4.2f\n", position.x, position.y, b2Rot_GetAngle(rotation));
-    std::cout << "Position: x:" << position.x << " y:" << position.y << "\n"; 
-
-    Rectangle rect = b2r::ConvertBodyToRect(dynamicId);
-    DrawRectangleRec(rect, RED);
-  }
-  
+// Simple entity wrapper
+struct Entity {
+    b2BodyId bodyId{};
+    b2Vec2 extent{};
+    Texture texture{};
 };
 
-int main () {
+void DrawEntity(const Entity& e) {
+    b2Vec2 p = b2Body_GetWorldPoint(e.bodyId, {-e.extent.x, -e.extent.y});
+    float radians = b2Rot_GetAngle(b2Body_GetRotation(e.bodyId));
+    Vector2 pos{p.x, p.y};
+    DrawTextureEx(e.texture, pos, RAD2DEG * radians, 1.0f, WHITE);
+}
 
-  PhysicsHandler phyHandler;
-  
-  InitWindow( 64*5 , 64*5, "Animation Test");
+int main() {
+    const int screenW = 800, screenH = 600;
+    InitWindow(screenW, screenH, "Spawn boxes with mouse");
+    SetTargetFPS(60);
 
-  while ( !WindowShouldClose() )
-  { 
+    // Box2D setup
+    const float PPM = 32.0f; // pixels per meter
+    b2SetLengthUnitsPerMeter(PPM);
 
-    phyHandler.Update();
+    b2WorldDef worldDef = b2DefaultWorldDef();
+    worldDef.gravity.y = 9.8f * PPM;
+    b2WorldId worldId = b2CreateWorld(&worldDef);
 
-    BeginDrawing();
+    // Textures
+    Texture groundTex = LoadTexture("./assets/long_ground.png");
+    Texture boxTex    = LoadTexture("./assets/box.png");
 
-    phyHandler.Draw();
+    b2Vec2 groundExtent{0.5f * groundTex.width, 0.5f * groundTex.height};
+    b2Vec2 boxExtent{0.5f * boxTex.width, 0.5f * boxTex.height};
 
-    ClearBackground(GRAY);
+    b2Polygon groundPoly = b2MakeBox(groundExtent.x, groundExtent.y);
+    b2Polygon boxPoly    = b2MakeBox(boxExtent.x, boxExtent.y);
 
-    EndDrawing();
-    
-  }
+    // Ground entity
+    std::vector<Entity> entities;
 
-  CloseWindow();
+    Entity ground{};
+    b2BodyDef bd = b2DefaultBodyDef();
+    bd.position = {screenW / 2.0f, screenH - groundExtent.y};
+    ground.bodyId = b2CreateBody(worldId, &bd);
+    ground.extent = groundExtent;
+    ground.texture = groundTex;
 
-  return 0;
+    b2ShapeDef sd = b2DefaultShapeDef();
+    b2CreatePolygonShape(ground.bodyId, &sd, &groundPoly);
+
+    entities.push_back(ground);
+
+    bool pause = false;
+
+    while (!WindowShouldClose()) {
+      if (IsKeyPressed(KEY_P)) pause = !pause;
+
+      if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
+        Vector2 mouse = GetMousePosition();
+
+        Entity circle{};
+        b2BodyDef bd = b2DefaultBodyDef();
+        bd.type = b2_dynamicBody;
+        bd.position = {mouse.x, mouse.y};
+        // bd.motionLocks.angularZ = true;
+        circle.bodyId = b2CreateBody(worldId, &bd);
+        circle.extent = boxExtent;
+        circle.texture = boxTex;
+
+        b2ShapeDef sd = b2DefaultShapeDef();
+        sd.density = 100.0f;
+        sd.material.friction = 20.0f;
+        // b2CreatePolygonShape(box.bodyId, &sd, &boxPoly);
+        //
+        // entities.push_back(box);
+      }
+
+      if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        Vector2 mouse = GetMousePosition();
+
+        Entity box{};
+        b2BodyDef bd = b2DefaultBodyDef();
+        bd.type = b2_dynamicBody;
+        bd.position = {mouse.x, mouse.y};
+        bd.motionLocks.angularZ = true;
+        box.bodyId = b2CreateBody(worldId, &bd);
+        box.extent = boxExtent;
+        box.texture = boxTex;
+
+        b2ShapeDef sd = b2DefaultShapeDef();
+        sd.density = 100.0f;
+        sd.material.friction = 20.0f;
+        b2CreatePolygonShape(box.bodyId, &sd, &boxPoly);
+
+        entities.push_back(box);
+      }
+
+      if (!pause) {
+        float dt = GetFrameTime();
+        b2World_Step(worldId, dt, 4);
+      }
+
+      BeginDrawing();
+      ClearBackground(DARKGRAY);
+
+      DrawText("Click to spawn boxes. Press P to pause.", 10, 10, 20, LIGHTGRAY);
+
+      for (auto& e : entities) DrawEntity(e);
+
+      EndDrawing();
+    }
+
+    UnloadTexture(groundTex);
+    UnloadTexture(boxTex);
+    CloseWindow();
+    return 0;
 }
