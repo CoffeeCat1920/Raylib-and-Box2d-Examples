@@ -1,0 +1,19 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/g++",
+      "-Iinclude",
+      "-Isrc",
+      "-std=c++17",
+      "-Wall",
+      "-Wextra",
+      "-c",
+      "-o",
+      "bin/main.o",
+      "main.cpp"
+    ],
+    "directory": "/home/ok/Code/box2d",
+    "file": "/home/ok/Code/box2d/main.cpp",
+    "output": "/home/ok/Code/box2d/bin/main.o"
+  }
+]
